@@ -69,47 +69,52 @@ ipcMain.on('transcription-start', async (event) => {
       return;
     }
 
-    if (!transcriptionService) {
-      console.log('Creating transcription service...');
-      transcriptionService = new RealtimeTranscriptionService({
-        apiKey,
-        model: 'gpt-4o-transcribe',
-        language: 'en',
-      });
-
-      // Set up transcription event listeners
-      transcriptionService.on('connected', () => {
-        console.log('Transcription service connected');
-        event.reply('transcription-connected');
-      });
-
-      transcriptionService.on('transcription', (segment: TranscriptionSegment) => {
-        console.log('Final transcription:', segment.text);
-        event.reply('transcription-result', segment);
-      });
-
-      transcriptionService.on('transcription_delta', (segment: TranscriptionSegment) => {
-        console.log('Transcription delta:', segment.text);
-        event.reply('transcription-delta', segment);
-      });
-
-      transcriptionService.on('speech_started', () => {
-        event.reply('transcription-speech-started');
-      });
-
-      transcriptionService.on('speech_stopped', () => {
-        event.reply('transcription-speech-stopped');
-      });
-
-      transcriptionService.on('error', (error: Error) => {
-        console.error('Transcription error:', error);
-        event.reply('transcription-error', error.message);
-      });
-
-      transcriptionService.on('disconnected', () => {
-        event.reply('transcription-disconnected');
-      });
+    // Always create a fresh transcription service
+    if (transcriptionService) {
+      console.log('Disconnecting existing transcription service...');
+      transcriptionService.disconnect();
+      transcriptionService = null;
     }
+
+    console.log('Creating transcription service...');
+    transcriptionService = new RealtimeTranscriptionService({
+      apiKey,
+      model: 'gpt-4o-transcribe',
+      language: 'en',
+    });
+
+    // Set up transcription event listeners
+    transcriptionService.on('connected', () => {
+      console.log('Transcription service connected');
+      event.reply('transcription-connected');
+    });
+
+    transcriptionService.on('transcription', (segment: TranscriptionSegment) => {
+      console.log('Final transcription:', segment.text);
+      event.reply('transcription-result', segment);
+    });
+
+    transcriptionService.on('transcription_delta', (segment: TranscriptionSegment) => {
+      console.log('Transcription delta:', segment.text);
+      event.reply('transcription-delta', segment);
+    });
+
+    transcriptionService.on('speech_started', () => {
+      event.reply('transcription-speech-started');
+    });
+
+    transcriptionService.on('speech_stopped', () => {
+      event.reply('transcription-speech-stopped');
+    });
+
+    transcriptionService.on('error', (error: Error) => {
+      console.error('Transcription error:', error);
+      event.reply('transcription-error', error.message);
+    });
+
+    transcriptionService.on('disconnected', () => {
+      event.reply('transcription-disconnected');
+    });
 
     await transcriptionService.connect();
   } catch (error) {
@@ -128,6 +133,65 @@ ipcMain.on('transcription-stop', async (event) => {
 // AudioTee IPC handlers
 ipcMain.on('audio-start', async (event) => {
   try {
+    // Start transcription service first
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      console.error('OPENAI_API_KEY not found in environment');
+      event.reply('transcription-error', 'OPENAI_API_KEY not configured');
+      return;
+    }
+
+    // Always create a fresh transcription service
+    if (transcriptionService) {
+      console.log('Disconnecting existing transcription service...');
+      transcriptionService.disconnect();
+      transcriptionService = null;
+    }
+
+    console.log('Creating transcription service...');
+    transcriptionService = new RealtimeTranscriptionService({
+      apiKey,
+      model: 'gpt-4o-transcribe',
+      language: 'en',
+    });
+
+    // Set up transcription event listeners
+    transcriptionService.on('connected', () => {
+      console.log('Transcription service connected');
+      event.reply('transcription-connected');
+    });
+
+    transcriptionService.on('transcription', (segment: TranscriptionSegment) => {
+      console.log('Final transcription:', segment.text);
+      event.reply('transcription-result', segment);
+    });
+
+    transcriptionService.on('transcription_delta', (segment: TranscriptionSegment) => {
+      console.log('Transcription delta:', segment.text);
+      event.reply('transcription-delta', segment);
+    });
+
+    transcriptionService.on('speech_started', () => {
+      event.reply('transcription-speech-started');
+    });
+
+    transcriptionService.on('speech_stopped', () => {
+      event.reply('transcription-speech-stopped');
+    });
+
+    transcriptionService.on('error', (error: Error) => {
+      console.error('Transcription error:', error);
+      event.reply('transcription-error', error.message);
+    });
+
+    transcriptionService.on('disconnected', () => {
+      event.reply('transcription-disconnected');
+    });
+
+    await transcriptionService.connect();
+
+    // Then start audio recording
     if (!audioTee) {
       console.log('Creating AudioTee instance...');
       audioTee = new AudioTee({ sampleRate: 16000, chunkDurationMs: 200 });
@@ -185,6 +249,12 @@ ipcMain.on('audio-stop', async (event) => {
     if (audioTee) {
       await audioTee.stop();
       audioTee = null;
+    }
+
+    // Stop transcription service
+    if (transcriptionService) {
+      transcriptionService.disconnect();
+      transcriptionService = null;
     }
   } catch (error) {
     console.error('Failed to stop AudioTee:', error);

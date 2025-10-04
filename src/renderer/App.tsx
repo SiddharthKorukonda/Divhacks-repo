@@ -60,11 +60,13 @@ function Hello() {
     });
 
     const cleanupTranscriptionResult = window.electron?.ipcRenderer.on('transcription-result', (segment: TranscriptionSegment) => {
+      console.log('Received transcription result:', segment);
       setTranscription((prev) => prev + ' ' + segment.text);
       setCurrentSegment('');
     });
 
     const cleanupTranscriptionDelta = window.electron?.ipcRenderer.on('transcription-delta', (segment: TranscriptionSegment) => {
+      console.log('Received transcription delta:', segment);
       setCurrentSegment(segment.text);
     });
 
@@ -112,21 +114,17 @@ function Hello() {
 
   const handleStartRecording = () => {
     setStatus('Starting...');
-    // Start transcription first
-    if (!isTranscribing) {
-      window.electron?.ipcRenderer.sendMessage('transcription-start');
-    }
-    // Then start recording
+    // Clear previous transcription
+    setTranscription('');
+    setCurrentSegment('');
+    // Start recording (this will also start transcription)
     window.electron?.ipcRenderer.sendMessage('audio-start');
   };
 
   const handleStopRecording = () => {
     setStatus('Stopping...');
+    // Stop recording (this will also stop transcription)
     window.electron?.ipcRenderer.sendMessage('audio-stop');
-    // Stop transcription when recording stops
-    if (isTranscribing) {
-      window.electron?.ipcRenderer.sendMessage('transcription-stop');
-    }
   };
 
   return (

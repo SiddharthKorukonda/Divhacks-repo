@@ -24,6 +24,7 @@ export class RealtimeTranscriptionService extends EventEmitter {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
   private commitInterval: NodeJS.Timeout | null = null;
+  private hasAudioInBuffer = false;
 
   constructor(config: TranscriptionConfig) {
     super();
@@ -127,11 +128,17 @@ export class RealtimeTranscriptionService extends EventEmitter {
     };
 
     this.ws.send(JSON.stringify(message));
+    this.hasAudioInBuffer = true; // Mark that we have audio to commit
   }
 
   // Commit audio buffer to trigger transcription
   private commitAudioBuffer(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // Only commit if we have audio in the buffer
+    if (!this.hasAudioInBuffer) {
       return;
     }
 
@@ -141,6 +148,7 @@ export class RealtimeTranscriptionService extends EventEmitter {
 
     this.ws.send(JSON.stringify(message));
     console.log('Committed audio buffer for transcription');
+    this.hasAudioInBuffer = false; // Reset flag after commit
   }
 
   private handleMessage(data: WebSocket.Data): void {
@@ -162,6 +170,7 @@ export class RealtimeTranscriptionService extends EventEmitter {
             item_id: message.item_id,
             previous_item_id: message.previous_item_id,
           });
+          this.hasAudioInBuffer = false; // Buffer was committed successfully
           this.emit('audio_committed', {
             itemId: message.item_id,
             previousItemId: message.previous_item_id,
