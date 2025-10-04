@@ -215,6 +215,15 @@ export class RealtimeTranscriptionService extends EventEmitter {
           } as TranscriptionSegment);
           break;
 
+        case 'conversation.item.input_audio_transcription.failed':
+          console.error('Transcription failed:', message.error);
+          this.emit('transcription_failed', {
+            id: message.item_id,
+            error: message.error,
+            timestamp: Date.now(),
+          });
+          break;
+
         case 'error':
           console.error('API error:', message.error);
           this.emit('error', new Error(message.error.message));
