@@ -12,6 +12,7 @@ import path from 'path';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
+import { AudioTee, AudioChunk } from 'audiotee';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 
@@ -24,11 +25,70 @@ class AppUpdater {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let audioTee: AudioTee | null = null;
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
+});
+
+// AudioTee IPC handlers
+ipcMain.on('audio-start', async (event) => {
+  try {
+    if (!audioTee) {
+      console.log('Creating AudioTee instance...');
+      audioTee = new AudioTee({ sampleRate: 16000, chunkDurationMs: 200 });
+
+      audioTee.on('data', (chunk: AudioChunk) => {
+        event.reply('audio-data', {
+          buffer: chunk.data,
+          length: chunk.data.length,
+          sampleRate: 16000,
+          chunkDurationMs: 200,
+        });
+      });
+
+      audioTee.on('start', () => {
+        console.log('AudioTee started successfully');
+        event.reply('audio-started');
+      });
+
+      audioTee.on('stop', () => {
+        console.log('AudioTee stopped');
+        event.reply('audio-stopped');
+      });
+
+      audioTee.on('error', (error: Error) => {
+        console.error('AudioTee error:', error);
+        event.reply('audio-error', error.message);
+      });
+
+      audioTee.on('log', (level, message) => {
+        console.log(`AudioTee [${level}]:`, message);
+        event.reply('audio-log', { level, message });
+      });
+    }
+
+    console.log('Starting AudioTee...');
+    await audioTee.start();
+    console.log('AudioTee start() completed');
+  } catch (error) {
+    console.error('Failed to start AudioTee:', error);
+    event.reply('audio-error', error instanceof Error ? error.message : 'Unknown error');
+  }
+});
+
+ipcMain.on('audio-stop', async (event) => {
+  try {
+    if (audioTee) {
+      await audioTee.stop();
+      audioTee = null;
+    }
+  } catch (error) {
+    console.error('Failed to stop AudioTee:', error);
+    event.reply('audio-error', error instanceof Error ? error.message : 'Unknown error');
+  }
 });
 
 if (process.env.NODE_ENV === 'production') {

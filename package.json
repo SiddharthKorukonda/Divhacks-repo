@@ -102,6 +102,7 @@
   },
   "dependencies": {
     "@electron/notarize": "^3.0.0",
+    "audiotee": "^0.0.6",
     "electron-debug": "^4.1.0",
     "electron-log": "^5.3.2",
     "electron-updater": "^6.3.9",
@@ -179,7 +180,10 @@
     "appId": "org.erb.ElectronReact",
     "asar": true,
     "afterSign": ".erb/scripts/notarize.js",
-    "asarUnpack": "**\\*.{node,dll}",
+    "asarUnpack": [
+      "**\\*.{node,dll}",
+      "**/node_modules/audiotee/bin/**"
+    ],
     "files": [
       "dist",
       "node_modules",
