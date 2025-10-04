@@ -3,8 +3,16 @@ import { useState, useEffect } from 'react';
 import icon from '../../assets/icon.svg';
 import './App.css';
 
+interface TranscriptionSegment {
+  id: string;
+  text: string;
+  timestamp: number;
+  isFinal: boolean;
+}
+
 function Hello() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [status, setStatus] = useState('Ready');
   const [chunkCount, setChunkCount] = useState(0);
   const [audioInfo, setAudioInfo] = useState<{
@@ -12,6 +20,9 @@ function Hello() {
     chunkDurationMs?: number;
     bufferSize?: number;
   }>({});
+  const [transcription, setTranscription] = useState<string>('');
+  const [currentSegment, setCurrentSegment] = useState<string>('');
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     // Set up listeners for AudioTee events
@@ -34,22 +45,6 @@ function Hello() {
         chunkDurationMs: data.chunkDurationMs,
         bufferSize: data.length,
       });
-
-      // Log actual audio data
-      const buffer = data.buffer;
-      console.log('Raw audio chunk:', buffer);
-
-      // Convert to array for inspection if it's a Buffer/Uint8Array
-      if (buffer) {
-        const samples = Array.from(buffer).slice(0, 20); // First 20 samples
-        console.log('First 20 samples:', samples);
-        console.log('Chunk metadata:', {
-          length: data.length,
-          sampleRate: data.sampleRate,
-          chunkDurationMs: data.chunkDurationMs,
-          bufferType: buffer.constructor.name,
-        });
-      }
     });
 
     const cleanupError = window.electron?.ipcRenderer.on('audio-error', (error: unknown) => {
@@ -58,22 +53,80 @@ function Hello() {
       console.error('AudioTee error:', error);
     });
 
+    // Transcription event listeners
+    const cleanupTranscriptionConnected = window.electron?.ipcRenderer.on('transcription-connected', () => {
+      setIsTranscribing(true);
+      setStatus('Transcription connected');
+    });
+
+    const cleanupTranscriptionResult = window.electron?.ipcRenderer.on('transcription-result', (segment: TranscriptionSegment) => {
+      setTranscription((prev) => prev + ' ' + segment.text);
+      setCurrentSegment('');
+    });
+
+    const cleanupTranscriptionDelta = window.electron?.ipcRenderer.on('transcription-delta', (segment: TranscriptionSegment) => {
+      setCurrentSegment(segment.text);
+    });
+
+    const cleanupSpeechStarted = window.electron?.ipcRenderer.on('transcription-speech-started', () => {
+      setIsSpeaking(true);
+    });
+
+    const cleanupSpeechStopped = window.electron?.ipcRenderer.on('transcription-speech-stopped', () => {
+      setIsSpeaking(false);
+    });
+
+    const cleanupTranscriptionError = window.electron?.ipcRenderer.on('transcription-error', (error: unknown) => {
+      console.error('Transcription error:', error);
+      setStatus(`Transcription error: ${error}`);
+    });
+
+    const cleanupTranscriptionDisconnected = window.electron?.ipcRenderer.on('transcription-disconnected', () => {
+      setIsTranscribing(false);
+      setStatus('Transcription disconnected');
+    });
+
     return () => {
       cleanupStarted?.();
       cleanupStopped?.();
       cleanupData?.();
       cleanupError?.();
+      cleanupTranscriptionConnected?.();
+      cleanupTranscriptionResult?.();
+      cleanupTranscriptionDelta?.();
+      cleanupSpeechStarted?.();
+      cleanupSpeechStopped?.();
+      cleanupTranscriptionError?.();
+      cleanupTranscriptionDisconnected?.();
     };
   }, []);
 
+  const handleStartTranscription = () => {
+    setStatus('Connecting to transcription service...');
+    window.electron?.ipcRenderer.sendMessage('transcription-start');
+  };
+
+  const handleStopTranscription = () => {
+    window.electron?.ipcRenderer.sendMessage('transcription-stop');
+  };
+
   const handleStartRecording = () => {
     setStatus('Starting...');
+    // Start transcription first
+    if (!isTranscribing) {
+      window.electron?.ipcRenderer.sendMessage('transcription-start');
+    }
+    // Then start recording
     window.electron?.ipcRenderer.sendMessage('audio-start');
   };
 
   const handleStopRecording = () => {
     setStatus('Stopping...');
     window.electron?.ipcRenderer.sendMessage('audio-stop');
+    // Stop transcription when recording stops
+    if (isTranscribing) {
+      window.electron?.ipcRenderer.sendMessage('transcription-stop');
+    }
   };
 
   return (
@@ -81,10 +134,11 @@ function Hello() {
       <div className="Hello">
         <img width="200" alt="icon" src={icon} />
       </div>
-      <h1>AudioTee Test</h1>
+      <h1>Real-time Transcription</h1>
       <div className="Hello">
         <div style={{ margin: '20px 0' }}>
           <p><strong>Status:</strong> {status}</p>
+          {isSpeaking && <p style={{ color: 'green' }}><strong>🎤 Speaking detected...</strong></p>}
           {isRecording && (
             <>
               <p><strong>Audio chunks received:</strong> {chunkCount}</p>
@@ -98,6 +152,7 @@ function Hello() {
             </>
           )}
         </div>
+
         <div>
           <button
             type="button"
@@ -128,6 +183,26 @@ function Hello() {
             Stop Recording
           </button>
         </div>
+
+        {(transcription || currentSegment) && (
+          <div style={{
+            marginTop: '30px',
+            padding: '20px',
+            backgroundColor: '#f5f5f5',
+            borderRadius: '8px',
+            textAlign: 'left',
+          }}>
+            <h3>Transcription:</h3>
+            <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#000' }}>
+              {transcription}
+              {currentSegment && (
+                <span style={{ color: '#666', fontStyle: 'italic' }}>
+                  {' '}{currentSegment}
+                </span>
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

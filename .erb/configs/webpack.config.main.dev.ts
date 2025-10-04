@@ -6,9 +6,14 @@ import path from 'path';
 import webpack from 'webpack';
 import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 import { merge } from 'webpack-merge';
+import Dotenv from 'dotenv-webpack';
 import checkNodeEnv from '../scripts/check-node-env';
 import baseConfig from './webpack.config.base';
 import webpackPaths from './webpack.paths';
+
+// Load .env file
+import dotenv from 'dotenv';
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // When an ESLint server is running, we can't set the NODE_ENV so we'll check if it's
 // at the dev webpack config is not accidentally run in a production environment
@@ -37,6 +42,12 @@ const configuration: webpack.Configuration = {
   },
 
   plugins: [
+    new Dotenv({
+      path: path.join(__dirname, '../../.env'),
+      safe: false,
+      systemvars: true,
+    }),
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     new BundleAnalyzerPlugin({
