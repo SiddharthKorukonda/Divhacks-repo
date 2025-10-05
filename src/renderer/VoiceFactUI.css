@@ -1,0 +1,105 @@
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.20); /* frosted white-blue tint */
+  --glass-border: rgba(255,255,255,0.35);
+  --glass-sheen: rgba(255,255,255,0.6);
+  --accent: #6ec8ff;
+  --text: rgba(12,20,28,0.95);
+  --muted: rgba(60,80,100,0.6);
+}
+
+body, html, #root {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* place the glass panel in the center */
+.factflow-window {
+  height: 100vh;
+  display: flex;
+  align-items: flex-start; /* align to top */
+  justify-content: flex-start; /* align to left */
+  padding: 20px; /* smaller padding so panel sits near corner */
+}
+
+.panel {
+  width: 460px;
+  max-width: calc(100% - 48px);
+  border-radius: 14px;
+  padding: 22px;
+  margin: 0; /* ensure flush positioning in top-left */
+  color: var(--text);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  background: linear-gradient(180deg, rgba(230,245,255,0.55), rgba(220,240,255,0.42));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 30px rgba(20,30,40,0.08), inset 0 1px 0 rgba(255,255,255,0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.voice-btn {
+  width: 84px;
+  height: 84px;
+  border-radius: 999px;
+  border: none;
+  margin: 0 auto;
+  display: block;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,255,255,0.9));
+  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 0 8px 24px rgba(16,40,60,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+  position: relative;
+  transition: all 200ms ease;
+  -webkit-app-region: no-drag; /* keep controls interactive */
+}
+
+.voice-btn:active { 
+  transform: scale(0.98);
+}
+
+/* persistent recording state with stronger visual indicators */
+.voice-btn.recording {
+  background: linear-gradient(180deg, rgba(255,90,90,0.3), rgba(255,70,70,0.2));
+  border-color: rgba(255,120,120,0.4);
+  box-shadow: 0 10px 30px rgba(255,120,120,0.18),
+              0 0 0 8px rgba(255,120,120,0.06),
+              inset 0 2px 4px rgba(255,255,255,0.3);
+  transform: scale(1.02);
+  animation: pulse 1.6s infinite;
+}
+
+.voice-btn .mic-icon {
+  width: 28px;
+  height: 28px;
+  margin: auto;
+  display: block;
+  background: radial-gradient(circle at 35% 30%, #fff 0%, rgba(255,255,255,0.85) 30%, rgba(255,255,255,0.18) 100%);
+  border-radius: 6px;
+  transition: all 200ms ease;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1.02); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1.02); }
+}
+
+.status-row { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+.status { color: var(--muted); font-size:13px; }
+.copy-btn { background:none;border:1px solid rgba(255,255,255,0.06); color:var(--muted); padding:6px 10px; border-radius:8px; cursor:pointer; }
+
+.output { margin-top:14px; min-height:120px; max-height:240px; overflow:auto; padding:12px; border-radius:10px; background: rgba(0,0,0,0.18); color:var(--text); font-size:14px; line-height:1.4; white-space:pre-wrap; }
+
+.placeholder { color: rgba(255,255,255,0.5); }
+
+.output-card { margin-top:14px; padding:12px; border-radius:10px; background: rgba(0,0,0,0.18); color:var(--text); }
+.heading { font-size:14px; margin-bottom:10px; }
+.transcript { font-size:14px; line-height:1.4; }
+.delta { color: rgba(255,255,255,0.6); font-style:italic; }
+
+.expand-btn { margin-top:10px; padding:5px 10px; font-size:12px; background:transparent; border:1px solid rgba(255,255,255,0.06); border-radius:8px; color:var(--muted); cursor:pointer; }
+
+.factcheck { margin-top:12px; padding:10px; border-radius:8px; background: rgba(255,255,255,0.02); color:var(--muted); }
+.factcheck .verdict { font-weight:600; color:var(--text); margin-bottom:6px; }
+.factcheck .explanation { font-size:13px; margin-bottom:6px; }
+.citations { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
