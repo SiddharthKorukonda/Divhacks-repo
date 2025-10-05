@@ -10,8 +10,15 @@ except Exception:
     pass
 import google.generativeai as genai
 from tavily import TavilyClient
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
+import opik
+opik.configure(
+    api_key=os.getenv("OPIK_API_KEY"),
+    workspace=os.getenv("OPIK_WORKSPACE"),
+    use_local=False)  # cloud; omit/adjust for self-hosted
+from opik.integrations.langchain import OpikTracer
+from langchain_core.messages import HumanMessage
 
 # Client Configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -179,14 +186,21 @@ def finalize(state: AgentState) -> AgentState:
 
 
 # Assemble the graph
+# ──────────────────────────────────────────────────────────────────────────────
+# Assemble the graph (FIXED)
+# ──────────────────────────────────────────────────────────────────────────────
 builder = StateGraph(AgentState)
+
+# Add only your real nodes (NOT START/END)
 builder.add_node("classify_claim", classify_claim)
 builder.add_node("research_with_tavily", research_with_tavily)
 builder.add_node("assess_claim", assess_claim)
 builder.add_node("finalize", finalize)
 
-builder.set_entry_point("classify_claim")
+# Entry: START → classify_claim   (don't add START as a node)
+builder.add_edge(START, "classify_claim")
 
+# Route out of classify_claim
 def route_from_classify(state: AgentState) -> str:
     return "research_with_tavily" if state.get("is_claim") else "finalize"
 
@@ -199,20 +213,30 @@ builder.add_conditional_edges(
     },
 )
 
+# Linear tail
 builder.add_edge("research_with_tavily", "assess_claim")
 builder.add_edge("assess_claim", "finalize")
 builder.add_edge("finalize", END)
 
-memory = MemorySaver()  # optional can remove
+# Compile ONCE (after all nodes/edges)
+memory = MemorySaver()  # optional
 GRAPH = builder.compile(checkpointer=memory)
 
+# Opik tracer (optional)
+tracer = OpikTracer(graph=GRAPH.get_graph(xray=True))
 
-# Convinience function to run the agent
+# ──────────────────────────────────────────────────────────────────────────────
+# Convenience function to run the agent
+# ──────────────────────────────────────────────────────────────────────────────
 def run_agent(text: str, thread_id: str = "session") -> Dict[str, Any]:
     init_state: AgentState = {"input_text": text}
-    # If you want step-by-step progress, iterate GRAPH.stream(...)
-    final_state = GRAPH.invoke(init_state, config={"configurable": {"thread_id": thread_id}})
-    # Shape the final payload
+    final_state = GRAPH.invoke(
+        init_state,
+        config={
+            "callbacks": [tracer],                # optional tracing
+            "configurable": {"thread_id": thread_id},  # needed if using checkpointer
+        },
+    )
     if final_state.get("verdict") == "not_a_claim":
         return {
             "status": "not_a_claim",
