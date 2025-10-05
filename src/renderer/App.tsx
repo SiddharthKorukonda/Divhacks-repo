@@ -1,5 +1,5 @@
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AudioLines, X } from 'lucide-react';
 import icon from '../../assets/icon.svg';
 import './App.css';
@@ -21,11 +21,79 @@ function Hello() {
     chunkDurationMs?: number;
     bufferSize?: number;
   }>({});
-  const [transcription, setTranscription] = useState<string>('');
+  const [transcription, setTranscription] = useState<string>(''); // Full transcript for display
+  const [bufferTranscript, setBufferTranscript] = useState<string>(''); // Hidden buffer for backend
   const [currentSegment, setCurrentSegment] = useState<string>('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [factCheckResult, setFactCheckResult] = useState<any>(null);
+  const [factCheckResults, setFactCheckResults] = useState<any[]>([]); // Array of fact-check results
+  const [expandedVerdicts, setExpandedVerdicts] = useState<Set<number>>(new Set([0])); // Track which verdicts are expanded (latest is 0)
+
+  // Poll backend every 15 seconds
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const pollInterval = setInterval(() => {
+      setBufferTranscript((currentBuffer) => {
+        const bufferToSend = currentBuffer.trim();
+
+        // Only send if there's content
+        if (!bufferToSend) {
+          return currentBuffer;
+        }
+
+        console.log('=== POLLING BACKEND (15s) ===');
+        console.log('Sending buffer:', bufferToSend);
+
+        // Send to backend
+        fetch('http://localhost:8080/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: bufferToSend,
+            thread_id: 'session',
+          }),
+        })
+        .then(response => {
+          console.log('Backend response status:', response.status);
+          if (response.ok) {
+            return response.json();
+          } else {
+            console.error('Backend returned error status:', response.status);
+            return null;
+          }
+        })
+        .then(result => {
+          if (result) {
+            console.log('Fact-check result:', result);
+            // If it's a claim that was fact-checked, display it
+            if (result.status === 'fact_checked') {
+              console.log('Displaying fact-check result');
+              const resultWithClaim = {
+                ...result,
+                claim: bufferToSend,
+                timestamp: Date.now()
+              };
+              setFactCheckResults(prev => [resultWithClaim, ...prev]);
+              setExpandedVerdicts(new Set([0]));
+            } else {
+              console.log('Not a claim');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to fact-check:', error);
+        });
+
+        // Clear buffer immediately after posting
+        return '';
+      });
+    }, 15000); // 15 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [isRecording]);
 
   useEffect(() => {
     // Set up listeners for AudioTee events
@@ -65,50 +133,13 @@ function Hello() {
     const cleanupTranscriptionResult = window.electron?.ipcRenderer.on('transcription-result', async (segment: TranscriptionSegment) => {
       console.log('Received transcription result:', segment);
       const newText = segment.text;
-      setTranscription((prev) => {
-        const fullTranscript = prev + ' ' + newText;
 
-        console.log('=== SENDING TO BACKEND ===');
-        console.log('Full transcript:', fullTranscript.trim());
+      // Update display transcript
+      setTranscription((prev) => prev + ' ' + newText);
 
-        // Send the FULL transcript to backend for fact-checking
-        fetch('http://localhost:8080/transcribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: fullTranscript.trim(),
-            thread_id: 'session',
-          }),
-        })
-        .then(response => {
-          console.log('Backend response status:', response.status);
-          if (response.ok) {
-            return response.json();
-          } else {
-            console.error('Backend returned error status:', response.status);
-            return null;
-          }
-        })
-        .then(result => {
-          if (result) {
-            console.log('Fact-check result:', result);
-            // Only show results if it's actually a claim that was fact-checked
-            if (result.status === 'fact_checked') {
-              console.log('Displaying fact-check result');
-              setFactCheckResult(result);
-            } else {
-              console.log('Not a claim, ignoring result');
-            }
-          }
-        })
-        .catch(error => {
-          console.error('Failed to fact-check:', error);
-        });
+      // Update buffer transcript (will be sent on next 15s interval)
+      setBufferTranscript((prevBuffer) => (prevBuffer + ' ' + newText).trim());
 
-        return fullTranscript;
-      });
       setCurrentSegment('');
     });
 
@@ -161,9 +192,12 @@ function Hello() {
 
   const handleStartRecording = () => {
     setStatus('Starting...');
-    // Clear previous transcription
+    // Clear previous transcription and buffer
     setTranscription('');
+    setBufferTranscript('');
     setCurrentSegment('');
+    setFactCheckResults([]);
+    setExpandedVerdicts(new Set([0]));
     // Start recording (this will also start transcription)
     window.electron?.ipcRenderer.sendMessage('audio-start');
   };
@@ -246,34 +280,84 @@ function Hello() {
         </div>
       )}
 
-      {factCheckResult && factCheckResult.status === 'fact_checked' && (
-        <div style={{
-          marginTop: '20px',
-          padding: '15px',
-          backgroundColor: factCheckResult.verdict === 'true' ? '#d4edda' :
-                          factCheckResult.verdict === 'false' ? '#f8d7da' : '#fff3cd',
-          borderRadius: '8px',
-          textAlign: 'left',
-          width: '100%',
-        }}>
-          <h3 style={{ fontSize: '14px', marginBottom: '10px', fontWeight: 'bold' }}>
-            Verdict: {factCheckResult.verdict}
-          </h3>
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#333', marginBottom: '10px' }}>
-            {factCheckResult.explanation}
-          </p>
-          {factCheckResult.citations && factCheckResult.citations.length > 0 && (
-            <div style={{ marginTop: '10px' }}>
-              <h4 style={{ fontSize: '12px', marginBottom: '5px' }}>Citations:</h4>
-              {factCheckResult.citations.map((citation: any, idx: number) => (
-                <div key={idx} style={{ fontSize: '11px', marginBottom: '5px' }}>
-                  <a href={citation.url} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff' }}>
-                    {citation.title}
-                  </a>
+      {factCheckResults.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          {factCheckResults.map((result, index) => {
+            const isExpanded = expandedVerdicts.has(index);
+            const toggleExpand = () => {
+              setExpandedVerdicts(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(index)) {
+                  newSet.delete(index);
+                } else {
+                  newSet.add(index);
+                }
+                return newSet;
+              });
+            };
+
+            return (
+              <div key={result.timestamp} style={{
+                marginBottom: '10px',
+                padding: '15px',
+                backgroundColor: result.verdict === 'true' ? '#d4edda' :
+                                result.verdict === 'false' ? '#f8d7da' : '#fff3cd',
+                borderRadius: '8px',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+              }}
+              onClick={toggleExpand}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>
+                    Verdict: {result.verdict}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#666' }}>
+                    {isExpanded ? '▼' : '▶'}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+
+                {isExpanded && (
+                  <>
+                    <div style={{
+                      marginTop: '10px',
+                      padding: '10px',
+                      backgroundColor: 'rgba(255,255,255,0.5)',
+                      borderRadius: '4px',
+                      borderLeft: '3px solid #666'
+                    }}>
+                      <h4 style={{ fontSize: '11px', marginBottom: '5px', fontWeight: 'bold', color: '#666' }}>
+                        Claim:
+                      </h4>
+                      <p style={{ fontSize: '12px', lineHeight: '1.4', color: '#333', margin: 0 }}>
+                        {result.claim}
+                      </p>
+                    </div>
+
+                    <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#333', margin: '10px 0' }}>
+                      {result.explanation}
+                    </p>
+
+                    {result.citations && result.citations.length > 0 && (
+                      <div style={{ marginTop: '10px' }}>
+                        <h4 style={{ fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>Citations:</h4>
+                        {result.citations.map((citation: any, idx: number) => (
+                          <div key={idx} style={{ fontSize: '11px', marginBottom: '5px' }}>
+                            <a href={citation.url} target="_blank" rel="noopener noreferrer"
+                               style={{ color: '#007bff' }}
+                               onClick={(e) => e.stopPropagation()}>
+                              {citation.title}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
