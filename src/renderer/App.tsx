@@ -25,6 +25,7 @@ function Hello() {
   const [currentSegment, setCurrentSegment] = useState<string>('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [factCheckResult, setFactCheckResult] = useState<any>(null);
 
   useEffect(() => {
     // Set up listeners for AudioTee events
@@ -61,9 +62,53 @@ function Hello() {
       setStatus('Transcription connected');
     });
 
-    const cleanupTranscriptionResult = window.electron?.ipcRenderer.on('transcription-result', (segment: TranscriptionSegment) => {
+    const cleanupTranscriptionResult = window.electron?.ipcRenderer.on('transcription-result', async (segment: TranscriptionSegment) => {
       console.log('Received transcription result:', segment);
-      setTranscription((prev) => prev + ' ' + segment.text);
+      const newText = segment.text;
+      setTranscription((prev) => {
+        const fullTranscript = prev + ' ' + newText;
+
+        console.log('=== SENDING TO BACKEND ===');
+        console.log('Full transcript:', fullTranscript.trim());
+
+        // Send the FULL transcript to backend for fact-checking
+        fetch('http://localhost:8080/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: fullTranscript.trim(),
+            thread_id: 'session',
+          }),
+        })
+        .then(response => {
+          console.log('Backend response status:', response.status);
+          if (response.ok) {
+            return response.json();
+          } else {
+            console.error('Backend returned error status:', response.status);
+            return null;
+          }
+        })
+        .then(result => {
+          if (result) {
+            console.log('Fact-check result:', result);
+            // Only show results if it's actually a claim that was fact-checked
+            if (result.status === 'fact_checked') {
+              console.log('Displaying fact-check result');
+              setFactCheckResult(result);
+            } else {
+              console.log('Not a claim, ignoring result');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to fact-check:', error);
+        });
+
+        return fullTranscript;
+      });
       setCurrentSegment('');
     });
 
@@ -197,6 +242,37 @@ function Hello() {
             >
               {isExpanded ? 'Show Less' : 'Show More'}
             </button>
+          )}
+        </div>
+      )}
+
+      {factCheckResult && factCheckResult.status === 'fact_checked' && (
+        <div style={{
+          marginTop: '20px',
+          padding: '15px',
+          backgroundColor: factCheckResult.verdict === 'true' ? '#d4edda' :
+                          factCheckResult.verdict === 'false' ? '#f8d7da' : '#fff3cd',
+          borderRadius: '8px',
+          textAlign: 'left',
+          width: '100%',
+        }}>
+          <h3 style={{ fontSize: '14px', marginBottom: '10px', fontWeight: 'bold' }}>
+            Verdict: {factCheckResult.verdict}
+          </h3>
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#333', marginBottom: '10px' }}>
+            {factCheckResult.explanation}
+          </p>
+          {factCheckResult.citations && factCheckResult.citations.length > 0 && (
+            <div style={{ marginTop: '10px' }}>
+              <h4 style={{ fontSize: '12px', marginBottom: '5px' }}>Citations:</h4>
+              {factCheckResult.citations.map((citation: any, idx: number) => (
+                <div key={idx} style={{ fontSize: '11px', marginBottom: '5px' }}>
+                  <a href={citation.url} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff' }}>
+                    {citation.title}
+                  </a>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

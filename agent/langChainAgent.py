@@ -97,13 +97,28 @@ def normalize_research(items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
 # Nodes (plain funcitons)
 
 def classify_claim(state: AgentState) -> AgentState:
+    import logging
+    logger = logging.getLogger(__name__)
+
     text = state["input_text"]
+    logger.info(f"Classifying claim: '{text}'")
+
     prompt = (
         "Task: Classify whether the user's text asserts a checkable factual claim.\n"
+        "A claim is any statement that asserts something as fact, even if conversational.\n"
+        "Examples of claims:\n"
+        "- 'The Eiffel Tower is 300 meters tall'\n"
+        "- 'Paris is the capital of France'\n"
+        "- 'Scientists discovered water on Mars'\n"
+        "- 'The stock market crashed yesterday'\n"
+        "NOT claims: opinions, questions, greetings, commands.\n"
+        "Be LIBERAL in classification - when in doubt, classify as a claim.\n"
         "Return JSON with keys: is_claim (true/false), reason (string <= 200 chars).\n\n"
         f"Text:\n```{text}```"
     )
     raw = gemini_json(GEMINI_CLASSIFY_MODEL, prompt, temperature=0.1)
+    logger.info(f"Gemini classification response: {raw}")
+
     try:
         judged = ClaimJudge(**raw)
     except ValidationError as e:
@@ -111,6 +126,9 @@ def classify_claim(state: AgentState) -> AgentState:
 
     state["is_claim"] = bool(judged.is_claim)
     state["claim_reason"] = judged.reason
+
+    logger.info(f"Is claim: {judged.is_claim}, Reason: {judged.reason}")
+
     if not judged.is_claim:
         state["verdict"] = "not_a_claim"
         state["explanation"] = judged.reason
