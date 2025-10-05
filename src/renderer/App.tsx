@@ -1,5 +1,6 @@
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { AudioLines, X } from 'lucide-react';
 import icon from '../../assets/icon.svg';
 import './App.css';
 
@@ -23,6 +24,7 @@ function Hello() {
   const [transcription, setTranscription] = useState<string>('');
   const [currentSegment, setCurrentSegment] = useState<string>('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     // Set up listeners for AudioTee events
@@ -128,80 +130,76 @@ function Hello() {
   };
 
   return (
-    <div>
-      <div className="Hello">
-        <img width="200" alt="icon" src={icon} />
+    <div className="darkContainer">
+      <div style={{ marginTop: '20px' }}>
+        <button
+          type="button"
+          onClick={isRecording ? handleStopRecording : handleStartRecording}
+          style={{
+            padding: '20px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            backgroundColor: isRecording ? '#ff4444' : '#333',
+            border: 'none',
+            color: 'white',
+            boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.15)',
+          }}
+        >
+          {isRecording ? <X size={24} /> : <AudioLines size={24} />}
+        </button>
       </div>
-      <h1>Real-time Transcription</h1>
-      <div className="Hello">
-        <div style={{ margin: '20px 0' }}>
-          <p><strong>Status:</strong> {status}</p>
-          {isSpeaking && <p style={{ color: 'green' }}><strong>🎤 Speaking detected...</strong></p>}
-          {isRecording && (
-            <>
-              <p><strong>Audio chunks received:</strong> {chunkCount}</p>
-              {audioInfo.sampleRate && (
-                <>
-                  <p><strong>Sample Rate:</strong> {audioInfo.sampleRate} Hz</p>
-                  <p><strong>Chunk Duration:</strong> {audioInfo.chunkDurationMs} ms</p>
-                  <p><strong>Buffer Size:</strong> {audioInfo.bufferSize} bytes</p>
-                </>
-              )}
-            </>
+
+      {(transcription || currentSegment) && (
+        <div style={{
+          marginTop: '30px',
+          padding: '15px',
+          backgroundColor: '#f5f5f5',
+          borderRadius: '8px',
+          textAlign: 'left',
+          width: '100%',
+        }}>
+          <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Transcription:</h3>
+          <p style={{
+            fontSize: '13px',
+            lineHeight: '1.6',
+            color: '#333',
+            maxHeight: isExpanded ? 'none' : '150px',
+            overflow: 'hidden',
+            position: 'relative',
+          }}>
+            {transcription}
+            {currentSegment && (
+              <span style={{ color: '#666', fontStyle: 'italic' }}>
+                {' '}{currentSegment}
+              </span>
+            )}
+          </p>
+          {(transcription + currentSegment).length > 200 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              style={{
+                marginTop: '10px',
+                padding: '5px 10px',
+                fontSize: '12px',
+                backgroundColor: 'transparent',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: '#333',
+                width: '100%',
+              }}
+            >
+              {isExpanded ? 'Show Less' : 'Show More'}
+            </button>
           )}
         </div>
-
-        <div>
-          <button
-            type="button"
-            onClick={handleStartRecording}
-            disabled={isRecording}
-            style={{
-              padding: '10px 20px',
-              margin: '5px',
-              fontSize: '16px',
-              cursor: isRecording ? 'not-allowed' : 'pointer',
-              opacity: isRecording ? 0.5 : 1,
-            }}
-          >
-            Start Recording
-          </button>
-          <button
-            type="button"
-            onClick={handleStopRecording}
-            disabled={!isRecording}
-            style={{
-              padding: '10px 20px',
-              margin: '5px',
-              fontSize: '16px',
-              cursor: !isRecording ? 'not-allowed' : 'pointer',
-              opacity: !isRecording ? 0.5 : 1,
-            }}
-          >
-            Stop Recording
-          </button>
-        </div>
-
-        {(transcription || currentSegment) && (
-          <div style={{
-            marginTop: '30px',
-            padding: '20px',
-            backgroundColor: '#f5f5f5',
-            borderRadius: '8px',
-            textAlign: 'left',
-          }}>
-            <h3>Transcription:</h3>
-            <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#000' }}>
-              {transcription}
-              {currentSegment && (
-                <span style={{ color: '#666', fontStyle: 'italic' }}>
-                  {' '}{currentSegment}
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
