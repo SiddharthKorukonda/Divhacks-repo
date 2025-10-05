@@ -1,16 +1,31 @@
 import os, json, re, time
 from typing import TypedDict, Literal, List, Dict, Any, Optional
 from pydantic import BaseModel, Field, ValidationError
+# Load local .env into the environment for development
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    # If python-dotenv isn't installed, environment variables must be provided by the shell
+    pass
 import google.generativeai as genai
 from tavily import TavilyClient
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 # Client Configuration
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    raise RuntimeError("Missing GOOGLE_API_KEY environment variable. Set it before running.")
+genai.configure(api_key=GOOGLE_API_KEY)
+
 GEMINI_CLASSIFY_MODEL = "gemini-2.5-flash"
 GEMINI_ASSESS_MODEL   = "gemini-2.5-pro"
-tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+if not TAVILY_API_KEY:
+    raise RuntimeError("Missing TAVILY_API_KEY environment variable. Set it before running.")
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 # State definition for LangGraph agent
 class AgentState(TypedDict, total=False):
@@ -137,8 +152,8 @@ def finalize(state: AgentState) -> AgentState:
 
 
 # Assemble the graph
-builder = StateGraph[AgentState](initial={"input_text": ""}, checkpoint=MemorySaver())
-builder.add.node ("classify_claim", classify_claim)
+builder = StateGraph(AgentState)
+builder.add_node("classify_claim", classify_claim)
 builder.add_node("research_with_tavily", research_with_tavily)
 builder.add_node("assess_claim", assess_claim)
 builder.add_node("finalize", finalize)
