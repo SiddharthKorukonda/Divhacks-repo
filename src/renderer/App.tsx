@@ -1,6 +1,7 @@
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { AudioLines, X } from 'lucide-react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import icon from '../../assets/icon.svg';
 import './App.css';
 
@@ -28,6 +29,8 @@ function Hello() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [factCheckResults, setFactCheckResults] = useState<any[]>([]); // Array of fact-check results
   const [expandedVerdicts, setExpandedVerdicts] = useState<Set<number>>(new Set([0])); // Track which verdicts are expanded (latest is 0)
+  const [summary, setSummary] = useState<string>('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   // Poll backend every 15 seconds
   useEffect(() => {
@@ -198,14 +201,61 @@ function Hello() {
     setCurrentSegment('');
     setFactCheckResults([]);
     setExpandedVerdicts(new Set([0]));
+    setSummary('');
+    setIsGeneratingSummary(false);
     // Start recording (this will also start transcription)
     window.electron?.ipcRenderer.sendMessage('audio-start');
   };
 
-  const handleStopRecording = () => {
+  const handleStopRecording = async () => {
     setStatus('Stopping...');
-    // Stop recording (this will also stop transcription)
+    // Stop recording (this will also stop transcription and disconnect websocket)
     window.electron?.ipcRenderer.sendMessage('audio-stop');
+
+    // Generate summary if we have fact-check results
+    if (factCheckResults.length > 0) {
+      setIsGeneratingSummary(true);
+      try {
+        // Initialize Gemini
+        const apiKey = process.env.GOOGLE_API_KEY || '';
+        if (!apiKey) {
+          throw new Error('GOOGLE_API_KEY not found in environment variables');
+        }
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+        // Format verdicts for summary
+        const verdictsText = factCheckResults
+          .map(
+            (v) =>
+              `Claim: ${v.claim || 'N/A'}\n` +
+              `Verdict: ${v.verdict || 'N/A'}\n` +
+              `Explanation: ${v.explanation || 'N/A'}`
+          )
+          .join('\n\n');
+
+        const prompt =
+          'You are summarizing fact-check results from a live speech or presentation.\n\n' +
+          'Provide a concise summary (3-5 sentences) that includes:\n' +
+          '1. Overall truthfulness assessment (how many claims were true/false/unsubstantiated)\n' +
+          '2. Key findings or patterns in the misinformation\n' +
+          '3. Most significant false or misleading claims\n\n' +
+          `Fact-check results:\n${verdictsText}\n\n` +
+          'Write the summary in a clear, journalistic style.';
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const summaryText = response.text();
+
+        setSummary(summaryText);
+      } catch (error) {
+        console.error('Error generating summary:', error);
+        setSummary(`Error generating summary: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsGeneratingSummary(false);
+      }
+    }
   };
 
   return (
@@ -280,6 +330,50 @@ function Hello() {
         </div>
       )}
 
+      {/* Summary Section */}
+      {isGeneratingSummary && (
+        <div style={{
+          marginTop: '20px',
+          padding: '20px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '8px',
+          textAlign: 'center',
+          width: '100%',
+        }}>
+          <h3 style={{ fontSize: '16px', marginBottom: '10px', fontWeight: 'bold' }}>
+            Generating Summary...
+          </h3>
+          <div style={{
+            display: 'inline-block',
+            width: '40px',
+            height: '40px',
+            border: '4px solid #ddd',
+            borderTop: '4px solid #333',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }} />
+        </div>
+      )}
+
+      {!isGeneratingSummary && summary && (
+        <div style={{
+          marginTop: '20px',
+          padding: '20px',
+          backgroundColor: '#e8f4f8',
+          borderRadius: '8px',
+          borderLeft: '4px solid #0066cc',
+          width: '100%',
+        }}>
+          <h3 style={{ fontSize: '16px', marginBottom: '10px', fontWeight: 'bold', color: '#0066cc' }}>
+            Overall Summary
+          </h3>
+          <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
+            {summary}
+          </p>
+        </div>
+      )}
+
+      {/* Verdicts Section */}
       {factCheckResults.length > 0 && (
         <div style={{ marginTop: '20px' }}>
           {factCheckResults.map((result, index) => {

@@ -102,6 +102,7 @@
   },
   "dependencies": {
     "@electron/notarize": "^3.0.0",
+    "@google/generative-ai": "^0.24.1",
     "audiotee": "^0.0.6",
     "dotenv": "^17.2.3",
     "dotenv-webpack": "^8.1.1",

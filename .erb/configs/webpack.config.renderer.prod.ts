@@ -10,10 +10,14 @@ import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 import CssMinimizerPlugin from 'css-minimizer-webpack-plugin';
 import { merge } from 'webpack-merge';
 import TerserPlugin from 'terser-webpack-plugin';
+import dotenv from 'dotenv';
 import baseConfig from './webpack.config.base';
 import webpackPaths from './webpack.paths';
 import checkNodeEnv from '../scripts/check-node-env';
 import deleteSourceMaps from '../scripts/delete-source-maps';
+
+// Load environment variables from .env file
+dotenv.config();
 
 checkNodeEnv('production');
 deleteSourceMaps();
@@ -109,6 +113,7 @@ const configuration: webpack.Configuration = {
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'production',
       DEBUG_PROD: false,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
     }),
 
     new MiniCssExtractPlugin({
