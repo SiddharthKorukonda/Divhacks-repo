@@ -25,6 +25,8 @@ npm install
 
 ## Starting Development
 
+Setup .env file in current directory following the .envexample file
+
 Start the app in the `dev` environment:
 
 ```bash
