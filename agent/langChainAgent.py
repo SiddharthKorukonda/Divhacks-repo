@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 import opik
 opik.configure(
     api_key=os.getenv("OPIK_API_KEY"),
-    workspace=os.getenv("OPIK_WORKSPACE"),
+    workspace='bj-alabi',
     use_local=False)  # cloud; omit/adjust for self-hosted
 from opik.integrations.langchain import OpikTracer
 from langchain_core.messages import HumanMessage
